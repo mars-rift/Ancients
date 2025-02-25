@@ -33,8 +33,29 @@
     static void StartGame()
     {
         Console.WriteLine("Game started!");
-        // Initialize player (General is no longer used for a special ability)
-        Player player = new Player { Gold = 100, Food = 50, Army = new Army { Name = "Player Army", Troops = 10, Strength = 5 } };
+        Random random = new Random();
+
+        // Randomize player's starting stats within reasonable ranges
+        int startingGold = random.Next(80, 121);      // 80-120 gold
+        int startingFood = random.Next(40, 61);       // 40-60 food
+        int startingTroops = random.Next(8, 13);      // 8-12 troops
+        int startingStrength = random.Next(4, 7);     // 4-6 strength
+
+        Player player = new Player
+        {
+            Gold = startingGold,
+            Food = startingFood,
+            Army = new Army
+            {
+                Name = "Player Army",
+                Troops = startingTroops,
+                Strength = startingStrength
+            }
+        };
+
+        Console.WriteLine("Your starting army:");
+        ShowStatus(player);
+
         GameLoop(player);
     }
 
@@ -68,8 +89,15 @@
                     break;
                 case "3":
                     PrepareAndSimulateBattle(player);
+                    if (player.Army.Troops <= 0)
+                    {
+                        Console.WriteLine("Game Over - Your army was defeated!");
+                        AskToPlayAgain();
+                        gameRunning = false;
+                    }
                     break;
                 case "4":
+                    AskToPlayAgain();
                     gameRunning = false;
                     break;
                 default:
@@ -221,6 +249,25 @@
             Console.WriteLine($"{playerArmy.Name} wins the battle!");
         else
             Console.WriteLine($"{enemyArmy.Name} wins the battle!");
+
+        AskToPlayAgain();
+    }
+
+    static void AskToPlayAgain()
+    {
+        Console.WriteLine("\nWould you like to play again? (Y/N)");
+        string input = Console.ReadLine()?.ToUpper() ?? "N";
+
+        if (input.StartsWith("Y"))
+        {
+            Console.Clear(); // Clear the console for a fresh start
+            Main(new string[] { }); // Restart the game
+        }
+        else
+        {
+            Console.WriteLine("Thanks for playing!");
+            Environment.Exit(0);
+        }
     }
 }
 
