@@ -119,7 +119,12 @@
         {
             player.Gold = int.Parse(reader.ReadLine() ?? "0");
             player.Food = int.Parse(reader.ReadLine() ?? "0");
-            player.Army = new Army { Name = "Player Army", Troops = int.Parse(reader.ReadLine() ?? "0"), Strength = 5 };
+            player.Army = new Army
+            {
+                Name = "Player Army",
+                Troops = int.Parse(reader.ReadLine() ?? "0"),
+                Strength = int.Parse(reader.ReadLine() ?? "0") // Ensure strength is also loaded
+            };
         }
         Console.WriteLine("Game loaded!");
         return player;
@@ -132,6 +137,7 @@
             writer.WriteLine(player.Gold);
             writer.WriteLine(player.Food);
             writer.WriteLine(player.Army.Troops);
+            writer.WriteLine(player.Army.Strength); // Ensure strength is also saved
         }
         Console.WriteLine("Game saved!");
     }
