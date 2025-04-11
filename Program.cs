@@ -1,4 +1,8 @@
-﻿class Program
+﻿using System;
+using System.IO;
+using System.Collections.Generic;
+
+class Program
 {
     static void Main(string[] args)
     {
@@ -53,6 +57,15 @@
             }
         };
 
+        // Add a general
+        player.General = new General { 
+            Name = "Commander Mars", 
+            Leadership = random.Next(1, 4),  // 1-3 leadership
+            Tactics = random.Next(1, 4)      // 1-3 tactics
+        };
+        
+        Console.WriteLine($"Your general is {player.General.Name} with {player.General.Leadership} leadership and {player.General.Tactics} tactics.");
+
         Console.WriteLine("Your starting army:");
         ShowStatus(player);
 
@@ -70,13 +83,31 @@
         bool gameRunning = true;
         while (gameRunning)
         {
+            // Add to GameLoop method before the menu
+            player.Food -= player.Army.Troops / 2; // Troops consume food
+            if (player.Food <= 0)
+            {
+                Console.WriteLine("Your army is starving! Troops are deserting...");
+                player.Army.Troops = Math.Max(player.Army.Troops - 2, 0);
+                player.Food = 0;
+                
+                if (player.Army.Troops <= 0)
+                {
+                    Console.WriteLine("Game Over - All your troops have deserted!");
+                    AskToPlayAgain();
+                    gameRunning = false;
+                    continue;
+                }
+            }
+
             Console.WriteLine("\nGame Menu:");
             Console.WriteLine("1. Save Game");
             // Console.WriteLine("2. Recruit Troops");
             Console.WriteLine("2. Show Army Status");
+            Console.WriteLine("3. Use General's Special Ability");
             // Removed general special ability option.
-            Console.WriteLine("3. Prepare and Simulate Battle");
-            Console.WriteLine("4. Exit Game");
+            Console.WriteLine("4. Prepare and Simulate Battle");
+            Console.WriteLine("5. Exit Game");
             string input = Console.ReadLine() ?? string.Empty;
 
             switch (input)
@@ -88,6 +119,15 @@
                     ShowStatus(player);
                     break;
                 case "3":
+                    // Implement general's special ability usage
+                    Console.WriteLine("Choose your general's special ability: (1-Rally, 2-Flank, 3-Retreat, 0-None)");
+                    string abilityChoice = Console.ReadLine() ?? "0";
+                    if (int.TryParse(abilityChoice, out int choice) && choice > 0 && choice <= 3)
+                    {
+                        player.General.UseAbility(player.Army, null, (General.SpecialAbility)(choice - 1));
+                    }
+                    break;
+                case "4":
                     PrepareAndSimulateBattle(player);
                     if (player.Army.Troops <= 0)
                     {
@@ -96,7 +136,7 @@
                         gameRunning = false;
                     }
                     break;
-                case "4":
+                case "5":
                     AskToPlayAgain();
                     gameRunning = false;
                     break;
@@ -115,19 +155,51 @@
     static Player LoadPlayerData()
     {
         Player player = new Player();
-        using (StreamReader reader = new StreamReader("save.txt"))
+        try
         {
-            player.Gold = int.Parse(reader.ReadLine() ?? "0");
-            player.Food = int.Parse(reader.ReadLine() ?? "0");
-            player.Army = new Army
+            if (File.Exists("save.txt"))
+            {
+                using (StreamReader reader = new StreamReader("save.txt"))
+                {
+                    player.Gold = int.Parse(reader.ReadLine() ?? "0");
+                    player.Food = int.Parse(reader.ReadLine() ?? "0");
+                    player.Army = new Army
+                    {
+                        Name = "Player Army",
+                        Troops = int.Parse(reader.ReadLine() ?? "0"),
+                        Strength = int.Parse(reader.ReadLine() ?? "0")
+                    };
+                }
+                Console.WriteLine("Game loaded!");
+            }
+            else
+            {
+                Console.WriteLine("No save file found. Starting new game...");
+                return StartNewPlayer();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading game: {ex.Message}");
+            return StartNewPlayer();
+        }
+        return player;
+    }
+
+    static Player StartNewPlayer()
+    {
+        Random random = new Random();
+        return new Player
+        {
+            Gold = random.Next(80, 121),
+            Food = random.Next(40, 61),
+            Army = new Army
             {
                 Name = "Player Army",
-                Troops = int.Parse(reader.ReadLine() ?? "0"),
-                Strength = int.Parse(reader.ReadLine() ?? "0") // Ensure strength is also loaded
-            };
-        }
-        Console.WriteLine("Game loaded!");
-        return player;
+                Troops = random.Next(8, 13),
+                Strength = random.Next(4, 7)
+            }
+        };
     }
 
     static void SaveGame(Player player)
@@ -138,6 +210,9 @@
             writer.WriteLine(player.Food);
             writer.WriteLine(player.Army.Troops);
             writer.WriteLine(player.Army.Strength); // Ensure strength is also saved
+            writer.WriteLine(player.General.Name);
+            writer.WriteLine(player.General.Leadership);
+            writer.WriteLine(player.General.Tactics);
         }
         Console.WriteLine("Game saved!");
     }
@@ -180,11 +255,11 @@
         ShowStatus(new Player { Gold = player.Gold, Food = player.Food, Army = player.Army });
 
         // Start the battle simulation, now with terrain and weather.
-        SimulateBattle(player.Army, enemy, battleTerrain, battleWeather);
+        SimulateBattle(player.Army, enemy, battleTerrain, battleWeather, player);
     }
 
     // In SimulateBattle, additional enemy tactical bonuses are applied.
-    static void SimulateBattle(Army playerArmy, Army enemyArmy, Terrain terrain, Weather weather)
+    static void SimulateBattle(Army playerArmy, Army enemyArmy, Terrain terrain, Weather weather, Player player)
     {
         Console.WriteLine("Battle begins!");
 
@@ -214,7 +289,7 @@
         while (playerArmy.Troops > 0 && enemyArmy.Troops > 0)
         {
             // Player always attacks.
-            playerArmy.Attack(enemyArmy);
+            playerArmy.Attack(enemyArmy, terrain, weather);
             Console.WriteLine($"{playerArmy.Name} attacks! {enemyArmy.Name} now has {enemyArmy.Troops} troops.");
 
             if (enemyArmy.Troops <= 0)
@@ -228,12 +303,12 @@
                 if (random.Next(0, 100) < 30)
                 {
                     Console.WriteLine($"{enemyArmy.Name} launches a double attack!");
-                    enemyArmy.Attack(playerArmy);
-                    enemyArmy.Attack(playerArmy);
+                    enemyArmy.Attack(playerArmy, terrain, weather);
+                    enemyArmy.Attack(playerArmy, terrain, weather);
                 }
                 else
                 {
-                    enemyArmy.Attack(playerArmy);
+                    enemyArmy.Attack(playerArmy, terrain, weather);
                     Console.WriteLine($"{enemyArmy.Name} counterattacks!");
                 }
             }
@@ -252,11 +327,25 @@
         }
 
         if (playerArmy.Troops > 0)
+        {
             Console.WriteLine($"{playerArmy.Name} wins the battle!");
+            
+            // Award gold, food and experience based on battle difficulty
+            Random rnd = new Random();
+            int goldReward = rnd.Next(20, 51) * (int)terrain + 10 * enemyArmy.Strength;
+            int foodReward = rnd.Next(10, 31);
+            
+            player.Gold += goldReward;
+            player.Food += foodReward;
+            player.Army.Strength += 1; // Experience gain
+            
+            Console.WriteLine($"Rewards: {goldReward} gold, {foodReward} food");
+            Console.WriteLine($"Your army's strength increased to {player.Army.Strength}!");
+        }
         else
+        {
             Console.WriteLine($"{enemyArmy.Name} wins the battle!");
-
-        AskToPlayAgain();
+        }
     }
 
     static void AskToPlayAgain()
@@ -282,15 +371,40 @@ class Army
     public string Name { get; set; } = string.Empty; // Initialize with a default value
     public int Troops { get; set; }
     public int Strength { get; set; }
+    public Dictionary<UnitType, int> Units { get; set; } = new Dictionary<UnitType, int>();
 
-    public void Attack(Army enemy)
+    public void Attack(Army enemy, Terrain terrain, Weather weather)
     {
-        // Adjusted damage calculation to avoid overkilling the enemy.
-        // For example, use only the army’s Strength instead of multiplying by Troops.
-        int damage = Strength;
-        enemy.Troops -= damage;
+        Random random = new Random();
+        
+        // Base damage from strength
+        int baseDamage = Strength;
+        
+        // Apply terrain modifiers
+        double terrainModifier = 1.0;
+        switch (terrain)
+        {
+            case Terrain.Hills: terrainModifier = Name.Contains("Player") ? 0.8 : 1.2; break;
+            case Terrain.Forest: terrainModifier = 0.9; break;
+        }
+        
+        // Apply weather modifiers
+        double weatherModifier = 1.0;
+        switch (weather)
+        {
+            case Weather.Rain: weatherModifier = 0.8; break;
+            case Weather.Snow: weatherModifier = 0.7; break;
+        }
+        
+        // Calculate final damage with some randomness
+        int finalDamage = (int)(baseDamage * terrainModifier * weatherModifier);
+        finalDamage = Math.Max(1, finalDamage + random.Next(-1, 2)); // Add -1, 0, or +1 variance
+        
+        enemy.Troops -= finalDamage;
         if (enemy.Troops < 0)
             enemy.Troops = 0;
+            
+        Console.WriteLine($"{Name} deals {finalDamage} damage to {enemy.Name}!");
     }
 }
 
@@ -299,6 +413,7 @@ class Player
     public int Gold { get; set; }
     public int Food { get; set; }
     public Army Army { get; set; } = new Army(); // Initialize with a default value
+    public General General { get; set; } = new General();
 
     public void RecruitTroops(int cost, int troops)
     {
@@ -321,13 +436,41 @@ class General
     public int Leadership { get; set; }
     public int Tactics { get; set; }
 
-    // Removed special ability implementation.
-    // public void UseAbility(Army army)
-    // {
-    //     army.Strength += Leadership;
-    //     Console.WriteLine($"{Name} inspires the troops and increases their strength to {army.Strength}!");
-    // }
+    public enum SpecialAbility { Rally, Flank, Retreat }
+
+    public void UseAbility(Army army, Army? enemy, SpecialAbility ability)
+    {
+        switch (ability)
+        {
+            case SpecialAbility.Rally:
+                int boost = Leadership;
+                army.Strength += boost;
+                Console.WriteLine($"{Name} rallies the troops, boosting strength by {boost}!");
+                break;
+                
+            case SpecialAbility.Flank:
+                if (enemy != null)
+                {
+                    int damage = Tactics * 2;
+                    enemy.Troops -= damage;
+                    if (enemy.Troops < 0) enemy.Troops = 0;
+                    Console.WriteLine($"{Name} orders a flanking maneuver, dealing {damage} damage!");
+                }
+                else
+                {
+                    Console.WriteLine($"{Name} cannot flank with no enemy present. Defaulting to rally.");
+                    army.Strength += Leadership;
+                }
+                break;
+                
+            case SpecialAbility.Retreat:
+                army.Strength += 1;
+                Console.WriteLine($"{Name} orders a tactical retreat, regrouping and increasing strength by 1!");
+                break;
+        }
+    }
 }
 
 enum Terrain { Plains, Hills, Forest }
 enum Weather { Clear, Rain, Snow }
+enum UnitType { Infantry, Cavalry, Archers }
