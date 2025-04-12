@@ -4,6 +4,9 @@ using System.Collections.Generic;
 
 class Program
 {
+    // Add this to track player progress
+    static int campaignProgress = 0;
+
     static void Main(string[] args)
     {
         bool isRunning = true;
@@ -81,15 +84,32 @@ class Program
     static void GameLoop(Player player)
     {
         bool gameRunning = true;
+        Random random = new Random();
         while (gameRunning)
         {
-            // Add to GameLoop method before the menu
-            player.Food -= player.Army.Troops / 2; // Troops consume food
+        
+            int foodConsumed = player.Army.Troops / 2;
+            if (player.Army.Troops > 20)
+            {
+                foodConsumed += (player.Army.Troops - 20) / 4; // Extra consumption for large armies
+            }
+            player.Food -= foodConsumed;
+            Console.WriteLine($"Your army consumed {foodConsumed} food.");
             if (player.Food <= 0)
             {
                 Console.WriteLine("Your army is starving! Troops are deserting...");
-                player.Army.Troops = Math.Max(player.Army.Troops - 2, 0);
+                // Lose a percentage of troops instead of a fixed number
+                int deserters = Math.Max(player.Army.Troops / 5, 2); // 20% desertion or at least 2
+                player.Army.Troops = Math.Max(player.Army.Troops - deserters, 0);
+                Console.WriteLine($"{deserters} troops have deserted due to starvation!");
                 player.Food = 0;
+                
+                // Also reduce strength when starving
+                if (random.Next(0, 100) < 30) // 30% chance to lose strength
+                {
+                    player.Army.Strength = Math.Max(player.Army.Strength - 1, 1);
+                    Console.WriteLine("Army morale is falling! Strength reduced by 1.");
+                }
                 
                 if (player.Army.Troops <= 0)
                 {
@@ -106,8 +126,9 @@ class Program
             Console.WriteLine("2. Show Army Status");
             Console.WriteLine("3. Use General's Special Ability");
             // Removed general special ability option.
-            Console.WriteLine("4. Prepare and Simulate Battle");
-            Console.WriteLine("5. Exit Game");
+            Console.WriteLine("4. Visit Market");  // Add this line
+            Console.WriteLine("5. Prepare and Simulate Battle");
+            Console.WriteLine("6. Exit Game");  // Adjust this number
             string input = Console.ReadLine() ?? string.Empty;
 
             switch (input)
@@ -128,6 +149,9 @@ class Program
                     }
                     break;
                 case "4":
+                    VisitMarket(player);
+                    break;
+                case "5":
                     PrepareAndSimulateBattle(player);
                     if (player.Army.Troops <= 0)
                     {
@@ -136,7 +160,7 @@ class Program
                         gameRunning = false;
                     }
                     break;
-                case "5":
+                case "6":  // Adjust this number
                     AskToPlayAgain();
                     gameRunning = false;
                     break;
@@ -224,10 +248,15 @@ class Program
 
         Random random = new Random();
 
-        // Increased enemy base strength between 8 and 10.
-        int enemyTroops = random.Next(8, 16);     // 8 to 15 troops.
-        int enemyStrength = random.Next(8, 11);     // Increased enemy strength between 8 and 10.
-        Army enemy = new Army { Name = "Enemy Army", Troops = enemyTroops, Strength = enemyStrength };
+        // REPLACE enemy generation with this scaling version
+        int playerPower = player.Army.Troops * player.Army.Strength;
+        int difficultyTier = Math.Min(playerPower / 50, 5); // 0-5 difficulty tiers
+        
+        // Scale enemy troops and strength based on player's power
+        int enemyTroops = random.Next(8 + difficultyTier * 3, 16 + difficultyTier * 4);
+        int enemyStrength = random.Next(8 + difficultyTier, 11 + difficultyTier * 2);
+        
+        Army enemy = new Army { Name = GetEnemyName(difficultyTier), Troops = enemyTroops, Strength = enemyStrength };
         Console.WriteLine($"Enemy generated with {enemy.Troops} troops and strength {enemy.Strength}.");
 
         // Generate random terrain and weather.
@@ -237,16 +266,28 @@ class Program
         Weather battleWeather = (Weather)(weathers.GetValue(random.Next(weathers.Length)) ?? Weather.Clear);
         Console.WriteLine($"Battle Terrain: {battleTerrain}, Weather: {battleWeather}");
 
-        // Automatically invest available gold to recruit extra troops.
+        // Replace your automatic recruitment code with this:
         if (player.Gold >= 50)
         {
-            int extraTroops = player.Gold / 50; // For every 50 gold, gain 1 troop.
-            player.RecruitTroops(extraTroops * 50, extraTroops);
-            Console.WriteLine("Extra troops recruited using available gold for battle preparation.");
-        }
-        else
-        {
-            Console.WriteLine("Not enough gold for additional troop recruitment.");
+            int maxExtraTroops = Math.Min(player.Gold / 50, 5); // Cap at 5 new troops per battle
+            int extraTroops = maxExtraTroops;
+            
+            if (player.Food < player.Army.Troops / 2 + extraTroops / 2)
+            {
+                Console.WriteLine("Warning: You don't have enough food to support more troops!");
+                Console.WriteLine("Limiting recruitment to conserve food supplies.");
+                extraTroops = Math.Max(0, (player.Food * 2) - player.Army.Troops);
+            }
+            
+            if (extraTroops > 0)
+            {
+                player.RecruitTroops(extraTroops * 50, extraTroops);
+                Console.WriteLine($"{extraTroops} troops recruited using {extraTroops * 50} gold.");
+            }
+            else
+            {
+                Console.WriteLine("No troops recruited due to food shortage.");
+            }
         }
 
         // Removed general's ability call.
@@ -256,6 +297,15 @@ class Program
 
         // Start the battle simulation, now with terrain and weather.
         SimulateBattle(player.Army, enemy, battleTerrain, battleWeather, player);
+    }
+
+    // Add this method to get more impressive enemy names as difficulty increases
+    static string GetEnemyName(int tier)
+    {
+        string[] prefixes = { "", "Veteran ", "Elite ", "Royal ", "Imperial ", "Legendary " };
+        string[] types = { "Militia", "Brigands", "Warriors", "Soldiers", "Legion", "Vanguard" };
+        
+        return prefixes[tier] + types[Math.Min(tier, types.Length - 1)];
     }
 
     // In SimulateBattle, additional enemy tactical bonuses are applied.
@@ -286,6 +336,12 @@ class Program
             Console.WriteLine($"{enemyArmy.Name} benefits from the rain, boosting its strength to {enemyArmy.Strength}.");
         }
 
+        // ADD this special ability system
+        bool enemyHasSpecialAbilities = enemyArmy.Name.Contains("Elite") || 
+                                   enemyArmy.Name.Contains("Royal") ||
+                                   enemyArmy.Name.Contains("Imperial") ||
+                                   enemyArmy.Name.Contains("Legendary");
+    
         while (playerArmy.Troops > 0 && enemyArmy.Troops > 0)
         {
             // Player always attacks.
@@ -298,7 +354,31 @@ class Program
             int decisionScore = random.Next(0, 100);
             int aggressiveThreshold = enemyArmy.Troops < playerArmy.Troops ? (70 + decisionBonus) : (40 + decisionBonus);
 
-            if (decisionScore < aggressiveThreshold)
+            // ADD special abilities for high-tier enemies
+            if (enemyHasSpecialAbilities && random.Next(0, 100) < 25) // 25% chance to use special ability
+            {
+                int ability = random.Next(0, 3);
+                switch (ability)
+                {
+                    case 0:
+                        // Formation shift - reduced incoming damage next round
+                        Console.WriteLine($"{enemyArmy.Name} shifts into a defensive formation!");
+                        enemyArmy.Strength += 2;
+                        break;
+                    case 1:
+                        // Coordinated strike - extra damage
+                        int extraDamage = Math.Min(playerArmy.Troops / 4, 5);
+                        playerArmy.Troops -= extraDamage;
+                        Console.WriteLine($"{enemyArmy.Name} executes a coordinated strike, dealing {extraDamage} extra damage!");
+                        break;
+                    case 2:
+                        // Tactical repositioning - both sides take less damage next round
+                        Console.WriteLine($"{enemyArmy.Name} repositions tactically, reducing combat intensity!");
+                        enemyArmy.Strength += 1;
+                        break;
+                }
+            }
+            else if (decisionScore < aggressiveThreshold)
             {
                 if (random.Next(0, 100) < 30)
                 {
@@ -332,8 +412,8 @@ class Program
             
             // Award gold, food and experience based on battle difficulty
             Random rnd = new Random();
-            int goldReward = rnd.Next(20, 51) * (int)terrain + 10 * enemyArmy.Strength;
-            int foodReward = rnd.Next(10, 31);
+            int goldReward = Math.Min(rnd.Next(15, 41) * (int)terrain + 8 * enemyArmy.Strength, 200);
+            int foodReward = Math.Min(rnd.Next(8, 26), 50);
             
             player.Gold += goldReward;
             player.Food += foodReward;
@@ -341,10 +421,36 @@ class Program
             
             Console.WriteLine($"Rewards: {goldReward} gold, {foodReward} food");
             Console.WriteLine($"Your army's strength increased to {player.Army.Strength}!");
+
+            // Add this line:
+            UpdateCampaignProgress(player);
         }
         else
         {
             Console.WriteLine($"{enemyArmy.Name} wins the battle!");
+        }
+    }
+
+    
+    static void UpdateCampaignProgress(Player player)
+    {
+        // Progress is increased based on victories and army size
+        int newProgress = Math.Max(campaignProgress, 
+                              (player.Army.Troops / 10) + (player.Army.Strength - 4));
+    
+        if (newProgress > campaignProgress)
+        {
+            int increase = newProgress - campaignProgress;
+            campaignProgress = newProgress;
+            Console.WriteLine($"Your reputation is growing! Campaign progress increased by {increase} to {campaignProgress}.");
+            
+            // Milestone achievements
+            if (campaignProgress >= 5 && campaignProgress < 10)
+                Console.WriteLine("Word of your victories is spreading among local villages.");
+            else if (campaignProgress >= 10 && campaignProgress < 20)
+                Console.WriteLine("Regional lords are taking notice of your military prowess.");
+            else if (campaignProgress >= 20)
+                Console.WriteLine("Your army is now known throughout the realm!");
         }
     }
 
@@ -364,6 +470,55 @@ class Program
             Environment.Exit(0);
         }
     }
+
+    static void VisitMarket(Player player)
+    {
+        Console.WriteLine("\nMarket Options:");
+        Console.WriteLine("1. Buy Food (1 gold = 2 food)");
+        Console.WriteLine("2. Hire Basic Troops (50 gold each)");
+        Console.WriteLine("3. Train Existing Troops (+1 Strength, 100 gold)");
+        Console.WriteLine("4. Return to Main Menu");
+        
+        string choice = Console.ReadLine() ?? string.Empty;
+        switch (choice)
+        {
+            case "1":
+                Console.WriteLine("How much gold do you want to spend on food?");
+                if (int.TryParse(Console.ReadLine(), out int foodGold) && foodGold > 0)
+                {
+                    if (player.Gold >= foodGold)
+                    {
+                        player.Gold -= foodGold;
+                        player.Food += foodGold * 2;
+                        Console.WriteLine($"Purchased {foodGold * 2} food for {foodGold} gold.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Not enough gold.");
+                    }
+                }
+                break;
+            case "2":
+                Console.WriteLine("How many troops do you want to hire? (50 gold each)");
+                if (int.TryParse(Console.ReadLine(), out int troopCount) && troopCount > 0)
+                {
+                    player.RecruitTroops(troopCount * 50, troopCount);
+                }
+                break;
+            case "3":
+                if (player.Gold >= 100)
+                {
+                    player.Gold -= 100;
+                    player.Army.Strength += 1;
+                    Console.WriteLine("Your army's strength increased by 1!");
+                }
+                else
+                {
+                    Console.WriteLine("Not enough gold for training (requires 100 gold).");
+                }
+                break;
+        }
+    }
 }
 
 class Army
@@ -373,12 +528,21 @@ class Army
     public int Strength { get; set; }
     public Dictionary<UnitType, int> Units { get; set; } = new Dictionary<UnitType, int>();
 
+    // Update the Attack method in the Army class
     public void Attack(Army enemy, Terrain terrain, Weather weather)
     {
         Random random = new Random();
         
         // Base damage from strength
         int baseDamage = Strength;
+        
+        // ADD diminishing returns for very large armies
+        double sizeEfficiencyModifier = 1.0;
+        if (Troops > 30)
+        {
+            // Large armies become less efficient (command difficulties)
+            sizeEfficiencyModifier = 1.0 - Math.Min((Troops - 30) * 0.01, 0.3); // Up to 30% penalty
+        }
         
         // Apply terrain modifiers
         double terrainModifier = 1.0;
@@ -396,8 +560,8 @@ class Army
             case Weather.Snow: weatherModifier = 0.7; break;
         }
         
-        // Calculate final damage with some randomness
-        int finalDamage = (int)(baseDamage * terrainModifier * weatherModifier);
+        // Calculate final damage with all modifiers
+        int finalDamage = (int)(baseDamage * terrainModifier * weatherModifier * sizeEfficiencyModifier);
         finalDamage = Math.Max(1, finalDamage + random.Next(-1, 2)); // Add -1, 0, or +1 variance
         
         enemy.Troops -= finalDamage;
